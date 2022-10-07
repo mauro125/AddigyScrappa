@@ -1,5 +1,6 @@
 import json
 import requests
+import time
 
 from slack_token import *
 
@@ -9,19 +10,15 @@ comments = set()
 
 
 # def post_message_to_slack(text, blocks):
-def post_message_to_slack(text):
+def post_message_to_slack():
     return requests.post('https://slack.com/api/chat.postMessage', {
         'token': slack_token,
         'channel': slack_channel,
-        'text': text,
         'blocks': json.dumps(blocks) if blocks else None
     }).json()
 
 
-# Define Your Query
-# query = "verrakoooo"
-# query = "000000ortencialulusss"
-query = "aasdfasdfdfasdfas1222323"
+query = "addigy"
 # url = f"https://api.pushshift.io/reddit/search/comment/?q={query}"
 url = f"https://api.pushshift.io/reddit/submission/search/?q={query}"
 r = requests.get(url)
@@ -42,10 +39,10 @@ while userInput != '5':
     userInput = input('enter choice: ')
     if userInput == '1':
         count = 0
-        query = "addigy"
+        query = "aasdfasdfdfasdfas1222323"
         # url = f"https://api.pushshift.io/reddit/search/comment/?q={query}"
         # url = f"https://api.pushshift.io/reddit/search/submission/?q={query}"
-        url = f"https://api.pushshift.io/reddit/submission/search/?q={query}"
+        url = f"https://api.pushshift.io/reddit/submission/search/?q={query}&sort=asc"
         r = requests.get(url)
 
         data = json.loads(r.text, strict=False)
@@ -56,17 +53,22 @@ while userInput != '5':
                 comments.add(item['permalink'])
                 print(count, "__", item['permalink'])
 
-                postTitle = data['data'][count]['title']
-                urlInfo = data['data'][count]['permalink']
-                print(urlInfo)
-                postUrl = f"https://www.reddit.com{urlInfo}"
+                post_created_date = time.strftime('%b %d %Y %H:%M%p',
+                                                  time.localtime(data['data'][count]['created_utc']))
+                post_title = data['data'][count]['title']
+                url_of_post = data['data'][count]['url']
+                user_name = data['data'][count]['author']
+                if data['data'][count]['subreddit_id'] is not None:
+                    sub_reddit = f"r/{data['data'][count]['subreddit']}"
+                else:
+                    sub_reddit = 'no info available'
 
                 blocks = [
                     {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"A new Reddit post has been made:\n*<{postUrl}|{postTitle}>*"
+                            "text": f"A new Reddit mention:\n*<{url_of_post}|{post_title}>*"
                         }
                     },
                     {
@@ -74,24 +76,20 @@ while userInput != '5':
                         "fields": [
                             {
                                 "type": "mrkdwn",
-                                "text": "*Type:*\nComputer (laptop)"
+                                "text": f"*User Name:*\nu/{user_name}"
                             },
                             {
                                 "type": "mrkdwn",
-                                "text": "*When:*\nSubmitted Aut 10"
+                                "text": f"*Sub-reddit:*\n{sub_reddit}"
                             },
                             {
                                 "type": "mrkdwn",
-                                "text": "*Last Update:*\nMar 10, 2015 (3 years, 5 months)"
+                                "text": "*Type:*\nPost\n"
                             },
                             {
                                 "type": "mrkdwn",
-                                "text": "*Reason:*\nAll vowel keys aren't working."
+                                "text": f"*When:*\n{post_created_date}\n"
                             },
-                            {
-                                "type": "mrkdwn",
-                                "text": "*Specs:*\n\"Cheetah Pro 15\" - Fast, really fast\""
-                            }
                         ]
                     },
                     {
@@ -120,10 +118,7 @@ while userInput != '5':
                         ]
                     }
                 ]
-                slack_message = str(count) + "__" + item['permalink']
-
-                # post_message_to_slack(slack_message, blocks)
-                post_message_to_slack(slack_message)
+                post_message_to_slack()
             else:
                 print('no new posts')
             count += 1

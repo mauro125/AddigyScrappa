@@ -176,6 +176,7 @@ while userInput != '5':
         # url = f"https://api.pushshift.io/reddit/submission/search/?q={query}&size=2"
         # r = requests.get(url)
 
+# adding
     for query in queries:
         new_post_to_slack(query)
     get_reddit_time_stamp_from_messages_in_slack()

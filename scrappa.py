@@ -34,7 +34,6 @@ def get_reddit_time_stamp_from_messages_in_slack():
         for message in conversation_history:
             if message["blocks"][0]["type"] == 'section':
                 timeStampOfRedditMessage.add(message['text'])
-        # print(conversation_history[9]['text'])
         pprint(conversation_history)
         logger.info("{} messages found in {}".format(len(conversation_history), id))
 
@@ -45,20 +44,32 @@ def get_reddit_time_stamp_from_messages_in_slack():
 slack_channel = '#general'
 
 
-# def post_message_to_slack(text, blocks):
+def get_posts_from_pushshift(url):
+    r = ''
+    while True:
+        try:
+            r = requests.get(url)
+            if r.status_code != 200:
+                print("error code", r.status_code)
+                time.sleep(5)
+                continue
+            else:
+                break
+        except Exception as e:
+            print("error: ", e)
+            time.sleep(5)
+            continue
+    return json.loads(r.text, strict=False)
+
+
 def new_post_to_slack(query):
     get_reddit_time_stamp_from_messages_in_slack()
-    # postDateCreation = ''
-    # blocks = []
-    urlToGetPosts = f"https://api.pushshift.io/reddit/submission/search/?q={query}&size=3"
-    r = requests.get(urlToGetPosts)
-    data = json.loads(r.text, strict=False)
+    urlToGetPosts = f"https://api.pushshift.io/reddit/submission/search/?q={query}&size=1"
+    data = get_posts_from_pushshift(urlToGetPosts)
 
     # Reversing the data returned so the newest message will post last
     count = len(data['data']) - 1
     for item in reversed(data['data']):
-        # for item in reversed(data['data'][count]):
-        # if data['data'][count]['permalink'] not in comments:
         if str(data['data'][count]['created_utc']) not in timeStampOfRedditMessage:
             print('not in set adding new comment')
             print(data['data'][count]['permalink'])
@@ -139,7 +150,6 @@ def new_post_to_slack(query):
             }).json()
         else:
             print('no new posts')
-        # count += 1
         count -= 1
 
     # return response
@@ -168,15 +178,15 @@ while userInput != '5':
     print("\n\nenter 1 to check for new posts and comments")
     userInput = input('enter choice: ')
     if userInput == '1':
-        queries = ['addigy', 'mosyle', 'kandji', 'Jamf', "\"Manage Apple Devices\""]
-        # queries = ['kandji']
+        # queries = ['addigy', 'mosyle', 'kandji', 'Jamf', "\"jumpcloud\""]
+        queries = ['texas']
         # url = f"https://api.pushshift.io/reddit/search/comment/?q={query}"
         # url = f"https://api.pushshift.io/reddit/search/submission/?q={query}"
         # url = f"https://api.pushshift.io/reddit/submission/search/?q={query}&sort=asc"
         # url = f"https://api.pushshift.io/reddit/submission/search/?q={query}&size=2"
         # r = requests.get(url)
 
-# adding
+    # iterating through the queries
     for query in queries:
         new_post_to_slack(query)
     get_reddit_time_stamp_from_messages_in_slack()

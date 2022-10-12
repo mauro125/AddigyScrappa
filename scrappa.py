@@ -3,6 +3,7 @@ import json
 import requests
 import time
 import logging
+import csv
 # Import WebClient from Python SDK (github.com/slackapi/python-slack-sdk)
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -22,7 +23,7 @@ def get_reddit_time_stamp_from_messages_in_slack():
     channel_id = "C03PMAFFK50"
 
     try:
-        limit = 1
+        limit = 100
         # Call the conversations.history method using the WebClient
         # conversations.history returns the first 100 messages by default
         # These results are paginated, see: https://api.slack.com/methods/conversations.history$pagination
@@ -49,7 +50,7 @@ def get_posts_from_pushshift(url):
         try:
             # Pushshift API rate limit is 60 requests per minute(1 request per second)
             # Adding sleep to avoid hitting the limit
-            time.sleep(2)
+            time.sleep(1)
             r = requests.get(url)
             if r.status_code != 200:
                 print("error code", r.status_code)
@@ -64,10 +65,43 @@ def get_posts_from_pushshift(url):
     return json.loads(r.text, strict=False)
 
 
+def create_csv_file(data, query, sub_reddit, frequency_of_posts, frequency_of_comments):
+    header = ['Keyword', 'Sub-reddit', 'Occurrences as Posts', 'Occurrences as Comments', 'Total Mentions of Keyword']
+    data = [query, sub_reddit, frequency_of_posts, frequency_of_comments, frequency_of_posts + frequency_of_comments]
+
+    with open('countries.csv', 'w', encoding='UTF8') as f:
+        writer = csv.writer(f)
+
+        # write the header
+        writer.writerow(header)
+
+        # write the data
+        writer.writerow(data)
+
+
+def create_csv_with_list(stuff):
+    header = ['Keyword', 'Sub-reddit', 'Occurrences as Posts', 'Occurrences as Comments', 'Total Mentions of Keyword']
+    with open('countries.csv', 'w', encoding='UTF8') as f:
+
+        writer = csv.writer(f)
+        writer.writerow(header)
+        # write the header
+        writer.writerow(stuff)
+
+
+stuff = []
+
+
 def new_post_to_slack(query):
     get_reddit_time_stamp_from_messages_in_slack()
-    url_to_get_posts = f"https://api.pushshift.io/reddit/submission/search/?q={query}&size=2"
+
+    url_to_get_posts = f"https://api.pushshift.io/reddit/submission/search/?q={query}&size=1"
     data = get_posts_from_pushshift(url_to_get_posts)
+
+    # if data['data'][i]['subreddit_id'] is not None:
+    #     sub_reddit = f"r/{data['data'][i]['subreddit']}"
+    # else:
+    #     sub_reddit = 'no info available'
 
     # Reversing the data returned so the newest message will post last
     i = len(data['data']) - 1
@@ -82,21 +116,36 @@ def new_post_to_slack(query):
                 sub_reddit = f"r/{data['data'][i]['subreddit']}"
             else:
                 sub_reddit = 'no info available'
+
             DAY = 86400
             t = time.time() - 30 * DAY
+            url_key_word_post_occurrence_in_subreddit_30d = f"https://api.pushshift.io/reddit/submission/search/?subreddits={sub_reddit}&q={query}&after={int(t)}"
+            url_key_word_comment_occurrence_in_subreddit_30d = f"https://api.pushshift.io/reddit/comment/search/?subreddits={sub_reddit}&q={query}&after={int(t)}"
             url_to_get_user_statistics = f"https://api.pushshift.io/reddit/submission/search/?author={user_name}&q={query}&after={int(t)}"
+
+            user_data = get_posts_from_pushshift(url_key_word_post_occurrence_in_subreddit_30d)
+            user_data_comments = get_posts_from_pushshift(url_key_word_comment_occurrence_in_subreddit_30d)
+            frequency_of_posts = len(user_data['data'])
+            frequency_of_comments = len(user_data_comments['data'])
+
+            # items_in_queries = queries.lenght()
+            # create_csv_file(data, query, sub_reddit, frequency_of_posts, frequency_of_comments)
+            stuff_of = [query.replace('\"', '').capitalize(), sub_reddit, frequency_of_posts, frequency_of_comments,
+                        frequency_of_posts + frequency_of_comments]
+            stuff.append(stuff_of)
+
             user_data = get_posts_from_pushshift(url_to_get_user_statistics)
             frequency_of_posts = len(user_data['data'])
 
             if frequency_of_posts > 1:
                 frequency_of_posts_str = f"u/{user_name} has made {frequency_of_posts} posts mentioning the Keyword: *" + \
-                                   query.replace('\"', '').capitalize() + "*"
+                                         query.replace('\"', '').capitalize() + "*"
             elif frequency_of_posts == 0:
                 frequency_of_posts_str = f"u/{user_name} has made no posts mentioning" + " the Keyword: *" + \
-                                   query.replace('\"', '').capitalize() + "* (this is older than 1 month)"
+                                         query.replace('\"', '').capitalize() + "* (this is older than 1 month)"
             else:
                 frequency_of_posts_str = f"u/{user_name} has made {frequency_of_posts} post mentioning the Keyword: *" + \
-                                   query.replace('\"', '').capitalize() + "*"
+                                         query.replace('\"', '').capitalize() + "*"
             blocks = [
                 {
                     "type": "section",
@@ -165,7 +214,6 @@ def new_post_to_slack(query):
             ]
             # sending reddit post time stamp to slack, so we can later check if the post has already been posted
             post_date_creation = data['data'][i]['created_utc']
-
             requests.post('https://slack.com/api/chat.postMessage', {
                 'token': slack_token_code,
                 'channel': slack_channel,
@@ -183,8 +231,11 @@ while user_input != '5':
     print("\n\nenter 1 to check for new posts and comments")
     user_input = input('enter choice: ')
     if user_input == '1':
-        queries = ['addigy', 'mosyle', 'kandji', 'Jamf', "\"jumpcloud\""]
+        # if query has spaces, need to wrap it in \"query with spaces\"
+        queries = ['addigy', 'mosyle', 'kandji', 'jamf', "\"manage apple devices\""]
+
     # iterating through the queries
     for query in queries:
         new_post_to_slack(query)
+    create_csv_with_list(stuff)
     get_reddit_time_stamp_from_messages_in_slack()

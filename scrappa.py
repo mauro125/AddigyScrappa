@@ -1,3 +1,5 @@
+from pprint import pprint
+
 from slack_token import *
 import json
 import requests
@@ -14,6 +16,8 @@ from slack_sdk.errors import SlackApiError
 client = WebClient(token=slack_token_code)
 logger = logging.getLogger(__name__)
 time_stamp_of_reddit_message = set()
+DAY = 86400
+t = time.time() - 30 * DAY
 
 
 # Store conversation history
@@ -23,7 +27,7 @@ def get_reddit_time_stamp_from_messages_in_slack():
     channel_id = "C03PMAFFK50"
 
     try:
-        limit = 100
+        limit = 200
         # Call the conversations.history method using the WebClient
         # conversations.history returns the first 100 messages by default
         # These results are paginated, see: https://api.slack.com/methods/conversations.history$pagination
@@ -65,11 +69,11 @@ def get_posts_from_pushshift(url):
     return json.loads(r.text, strict=False)
 
 
-def create_csv_file(data, query, sub_reddit, frequency_of_posts, frequency_of_comments):
+def create_csv_file(query, sub_reddit, frequency_of_posts, frequency_of_comments):
     header = ['Keyword', 'Sub-reddit', 'Occurrences as Posts', 'Occurrences as Comments', 'Total Mentions of Keyword']
     data = [query, sub_reddit, frequency_of_posts, frequency_of_comments, frequency_of_posts + frequency_of_comments]
 
-    with open('countries.csv', 'w', encoding='UTF8') as f:
+    with open('30 day report.csv', 'w', encoding='UTF8') as f:
         writer = csv.writer(f)
 
         # write the header
@@ -79,14 +83,49 @@ def create_csv_file(data, query, sub_reddit, frequency_of_posts, frequency_of_co
         writer.writerow(data)
 
 
-def create_csv_with_list(stuff):
-    header = ['Keyword', 'Sub-reddit', 'Occurrences as Posts', 'Occurrences as Comments', 'Total Mentions of Keyword']
-    with open('countries.csv', 'w', encoding='UTF8') as f:
 
+post_per_query = {}
+comments_per_query = {}
+
+def create_csv_with_list(queries):
+    for query in queries:
+        url_to_get_posts = f"https://api.pushshift.io/reddit/submission/search/?q={query}&after={int(t)}"
+        data = get_posts_from_pushshift(url_to_get_posts)
+        posts_for_keyword_surreddit = {}
+
+        for _ in data['data']:
+            if "r/" + _['subreddit'] not in posts_for_keyword_surreddit:
+                posts_for_keyword_surreddit["r/" + _['subreddit']] = 1
+                # posts_for_keyword_surreddit[_'sub_reddit']] = 1
+            else:
+                posts_for_keyword_surreddit["r/" + _['subreddit']] += 1
+
+        post_per_query[query] = posts_for_keyword_surreddit
+
+        comments_for_keyword_surreddit = {}
+        url_to_get_posts = f"https://api.pushshift.io/reddit/comment/search/?q={query}&after={int(t)}"
+        data = get_posts_from_pushshift(url_to_get_posts)
+        for _ in data['data']:
+            if "r/" + _['subreddit'] not in comments_for_keyword_surreddit:
+                comments_for_keyword_surreddit["r/" + _['subreddit']] = 1
+            else:
+                comments_for_keyword_surreddit["r/" + _['subreddit']] += 1
+        comments_per_query[query] = comments_for_keyword_surreddit
+        # pprint(data)
+    print("\n\n\nposts")
+    pprint(post_per_query)
+
+    print("\n\n\ncomments")
+    pprint(comments_per_query)
+
+    with open('30 day report.csv', 'w', encoding='UTF8') as f:
         writer = csv.writer(f)
-        writer.writerow(header)
+        data = [post_per_query, comments_per_query]
         # write the header
-        writer.writerow(stuff)
+        # writer.writerow(header)
+
+        # write the data
+        writer.writerow(data)
 
 
 stuff = []
@@ -95,7 +134,7 @@ stuff = []
 def new_post_to_slack(query):
     get_reddit_time_stamp_from_messages_in_slack()
 
-    url_to_get_posts = f"https://api.pushshift.io/reddit/submission/search/?q={query}&size=1"
+    url_to_get_posts = f"https://api.pushshift.io/reddit/submission/search/?q={query}&size=3"
     data = get_posts_from_pushshift(url_to_get_posts)
 
     # if data['data'][i]['subreddit_id'] is not None:
@@ -117,21 +156,20 @@ def new_post_to_slack(query):
             else:
                 sub_reddit = 'no info available'
 
-            DAY = 86400
-            t = time.time() - 30 * DAY
             url_key_word_post_occurrence_in_subreddit_30d = f"https://api.pushshift.io/reddit/submission/search/?subreddits={sub_reddit}&q={query}&after={int(t)}"
             url_key_word_comment_occurrence_in_subreddit_30d = f"https://api.pushshift.io/reddit/comment/search/?subreddits={sub_reddit}&q={query}&after={int(t)}"
             url_to_get_user_statistics = f"https://api.pushshift.io/reddit/submission/search/?author={user_name}&q={query}&after={int(t)}"
 
-            user_data = get_posts_from_pushshift(url_key_word_post_occurrence_in_subreddit_30d)
-            user_data_comments = get_posts_from_pushshift(url_key_word_comment_occurrence_in_subreddit_30d)
-            frequency_of_posts = len(user_data['data'])
-            frequency_of_comments = len(user_data_comments['data'])
+            user_data_posts_30d = get_posts_from_pushshift(url_key_word_post_occurrence_in_subreddit_30d)
+            user_data_comments_30d = get_posts_from_pushshift(url_key_word_comment_occurrence_in_subreddit_30d)
+            frequency_of_posts_30d = len(user_data_posts_30d['data'])
+            frequency_of_comments_30d = len(user_data_comments_30d['data'])
 
             # items_in_queries = queries.lenght()
-            # create_csv_file(data, query, sub_reddit, frequency_of_posts, frequency_of_comments)
-            stuff_of = [query.replace('\"', '').capitalize(), sub_reddit, frequency_of_posts, frequency_of_comments,
-                        frequency_of_posts + frequency_of_comments]
+            # create_csv_file(query, sub_reddit, frequency_of_posts, frequency_of_comments)
+            stuff_of = [query.replace('\"', '').capitalize(), sub_reddit, frequency_of_posts_30d,
+                        frequency_of_comments_30d,
+                        frequency_of_posts_30d + frequency_of_comments_30d]
             stuff.append(stuff_of)
 
             user_data = get_posts_from_pushshift(url_to_get_user_statistics)
@@ -228,14 +266,16 @@ def new_post_to_slack(query):
 user_input = -1
 
 while user_input != '5':
+    # if query has spaces, need to wrap it in \"query with spaces\"
+    queries = ['addigy', 'mosyle', 'kandji', 'jamf', "\"manage apple devices\""]
+    create_csv_with_list(queries)
     print("\n\nenter 1 to check for new posts and comments")
     user_input = input('enter choice: ')
     if user_input == '1':
-        # if query has spaces, need to wrap it in \"query with spaces\"
-        queries = ['addigy', 'mosyle', 'kandji', 'jamf', "\"manage apple devices\""]
+        # iterating through the queries
+        for query in queries:
+            new_post_to_slack(query)
+    else:
+        print('no new posts')
 
-    # iterating through the queries
-    for query in queries:
-        new_post_to_slack(query)
-    create_csv_with_list(stuff)
     get_reddit_time_stamp_from_messages_in_slack()

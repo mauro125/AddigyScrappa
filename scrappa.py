@@ -1,11 +1,8 @@
-from pprint import pprint
-
 from slack_token import *
 import json
 import requests
 import time
 import logging
-import csv
 import xlsxwriter
 # Import WebClient from Python SDK (github.com/slackapi/python-slack-sdk)
 from slack_sdk import WebClient
@@ -28,7 +25,6 @@ workbook_name = f"30dReport_{some_days_ago}_{current_time}.xlsx"
 workbook = xlsxwriter.Workbook(workbook_name)
 format = workbook.add_format()
 format.set_align('left')
-
 
 # Store conversation history
 def get_reddit_time_stamp_from_messages_in_slack():
@@ -79,44 +75,30 @@ def get_posts_from_pushshift(url):
     return json.loads(r.text, strict=False)
 
 
-# def create_csv_file(query, sub_reddit, frequency_of_posts, frequency_of_comments):
-#     header = ['Keyword', 'Sub-reddit', 'Occurrences as Posts', 'Occurrences as Comments', 'Total Mentions of Keyword']
-#     data = [query, sub_reddit, frequency_of_posts, frequency_of_comments, frequency_of_posts + frequency_of_comments]
-#
-#     with open('30 day report.csv', 'w', encoding='UTF8') as f:
-#         writer = csv.writer(f)
-#
-#         # write the header
-#         writer.writerow(header)
-#
-#         # write the data
-#         writer.writerow(data)
-
-
-def create_csv_with_list(queries):
+def create_xlsx_report(queries):
     for query in queries:
         worksheets.append(workbook.add_worksheet(query.replace('\"', '').capitalize()))
         url_to_get_posts = f"https://api.pushshift.io/reddit/submission/search/?q={query}&after={int(t)}"
         data = get_posts_from_pushshift(url_to_get_posts)
-        posts_for_keyword_surreddit = {}
+        posts_for_keyword_subreddit = {}
 
         for _ in data['data']:
-            if "r/" + _['subreddit'] not in posts_for_keyword_surreddit:
-                posts_for_keyword_surreddit["r/" + _['subreddit']] = 1
+            if "r/" + _['subreddit'] not in posts_for_keyword_subreddit:
+                posts_for_keyword_subreddit["r/" + _['subreddit']] = 1
             else:
-                posts_for_keyword_surreddit["r/" + _['subreddit']] += 1
+                posts_for_keyword_subreddit["r/" + _['subreddit']] += 1
 
-        post_per_query[query] = posts_for_keyword_surreddit
+        post_per_query[query] = posts_for_keyword_subreddit
 
-        comments_for_keyword_surreddit = {}
+        comments_for_keyword_subreddit = {}
         url_to_get_posts = f"https://api.pushshift.io/reddit/comment/search/?q={query}&after={int(t)}"
         data = get_posts_from_pushshift(url_to_get_posts)
         for _ in data['data']:
-            if "r/" + _['subreddit'] not in comments_for_keyword_surreddit:
-                comments_for_keyword_surreddit["r/" + _['subreddit']] = 1
+            if "r/" + _['subreddit'] not in comments_for_keyword_subreddit:
+                comments_for_keyword_subreddit["r/" + _['subreddit']] = 1
             else:
-                comments_for_keyword_surreddit["r/" + _['subreddit']] += 1
-        comments_per_query[query] = comments_for_keyword_surreddit
+                comments_for_keyword_subreddit["r/" + _['subreddit']] += 1
+        comments_per_query[query] = comments_for_keyword_subreddit
 
     col = 0
     data = [
@@ -277,7 +259,7 @@ while user_input != '5':
         for query in queries:
             new_post_to_slack(query)
     elif user_input == '2':
-        create_csv_with_list(queries)
+        create_xlsx_report(queries)
     else:
         print('no new posts')
 
